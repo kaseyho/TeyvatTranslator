@@ -15,6 +15,8 @@ pywin32>=306; sys_platform == "win32"
 # PaddleOCR 3.7.0's PP-OCRv6 profile recognizes Simplified and Traditional.
 paddlepaddle==3.3.1
 paddleocr==3.7.0
+# Keep the model downloader and frozen-runtime contract reproducible.
+paddlex==3.7.2
 
 pypinyin>=0.50.0
 opencc-python-reimplemented>=0.1.7

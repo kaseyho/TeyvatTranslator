@@ -28,9 +28,9 @@ Non-GitHub download page: https://teyvattranslator.vercel.app/
 3. **Launch** from Start Menu or Desktop shortcut
 4. Choose Simplified or Traditional Chinese, select the Genshin Impact window, and click **Start Translation**
 
-> First launch downloads translation models (~300MB) and may take a while. OCR
-> model assets are also downloaded on first use. Simplified and Traditional
-> share the same verified Chinese OCR profile, so this download happens once.
+> First launch downloads the translation model (~300MB) and may take a while.
+> The verified Chinese OCR models for Simplified and Traditional are included
+> in the installer, so OCR does not require a separate first-use download.
 
 ---
 
@@ -101,7 +101,7 @@ Requires [Inno Setup 6](https://jrsoftware.org/isdl.php) (free).
 python build.py --clean --installer
 ```
 
-Output: `dist/TeyvatTranslator-v1.5.0-Setup.exe`
+Output: `dist/TeyvatTranslator-v1.5.1-Setup.exe`
 
 </details>
 

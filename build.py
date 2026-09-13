@@ -8,16 +8,23 @@ Usage:
     python build.py --zip     # Also create a distributable ZIP
 """
 
+import argparse
 import os
-import sys
 import shutil
 import subprocess
-import argparse
+import sys
 from pathlib import Path
+
+from src.engine.ocr_models import (
+    DETECTION_MODEL_NAME,
+    OCR_MODEL_NAMES,
+    RECOGNITION_MODEL_NAME,
+    REQUIRED_MODEL_FILES,
+)
 
 # Build configuration
 APP_NAME = "TeyvatTranslator"
-VERSION = "1.5.0"
+VERSION = "1.5.1"
 BUILD_DIR = Path("build")
 DIST_DIR = Path("dist")
 SPEC_FILE = Path("TeyvatTranslator.spec")
@@ -67,9 +74,74 @@ def build_executable():
     if not SPEC_FILE.exists():
         print(f"Spec file not found: {SPEC_FILE}")
         return False
+
+    if not stage_ocr_models():
+        return False
     
     cmd = [sys.executable, "-m", "PyInstaller", str(SPEC_FILE), "--noconfirm"]
     return run_command(cmd, "Building executable with PyInstaller")
+
+
+def stage_ocr_models() -> bool:
+    """Download, validate, and stage the OCR models for the frozen bundle."""
+    configured_cache_root = os.environ.get("PADDLE_PDX_CACHE_HOME")
+    cache_root = Path(
+        configured_cache_root or BUILD_DIR / "paddlex-cache"
+    ).expanduser().resolve()
+    official_models_root = cache_root / "official_models"
+    staging_root = BUILD_DIR / "ocr_models"
+
+    for model_name in OCR_MODEL_NAMES:
+        cached_model_dir = official_models_root / model_name
+        if cached_model_dir.exists() and any(
+            not (cached_model_dir / filename).is_file()
+            for filename in REQUIRED_MODEL_FILES
+        ):
+            print(f"Removing incomplete cached OCR model: {cached_model_dir}")
+            shutil.rmtree(cached_model_dir)
+
+    os.environ["PADDLE_PDX_CACHE_HOME"] = str(cache_root)
+    os.environ["PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK"] = "True"
+    os.environ["PADDLE_PDX_ENABLE_MKLDNN_BYDEFAULT"] = "0"
+    os.environ["FLAGS_use_mkldnn"] = "0"
+
+    print("Preparing bundled PP-OCRv6 models...")
+    try:
+        from paddleocr import PaddleOCR
+
+        PaddleOCR(
+            text_detection_model_name=DETECTION_MODEL_NAME,
+            text_recognition_model_name=RECOGNITION_MODEL_NAME,
+            use_doc_orientation_classify=False,
+            use_doc_unwarping=False,
+            use_textline_orientation=False,
+        )
+    except Exception as exc:
+        print(f"Failed to prepare bundled OCR models: {type(exc).__name__}: {exc}")
+        return False
+
+    if staging_root.exists():
+        shutil.rmtree(staging_root)
+
+    for model_name in OCR_MODEL_NAMES:
+        source_dir = official_models_root / model_name
+        missing = [
+            source_dir / filename
+            for filename in REQUIRED_MODEL_FILES
+            if not (source_dir / filename).is_file()
+        ]
+        if missing:
+            print(
+                "Downloaded OCR model is incomplete; missing: "
+                + ", ".join(str(path) for path in missing)
+            )
+            return False
+
+        destination_dir = staging_root / model_name
+        shutil.copytree(source_dir, destination_dir)
+        print(f"Staged OCR model: {model_name}")
+
+    return True
 
 
 def create_zip():

@@ -2,7 +2,7 @@
 ; Creates a professional Windows installer
 
 #define MyAppName "TeyvatTranslator"
-#define MyAppVersion "1.5.0"
+#define MyAppVersion "1.5.1"
 #define MyAppPublisher "hokeiiiching"
 #define MyAppURL "https://github.com/kaseyho/TeyvatTranslator"
 #define MyAppExeName "TeyvatTranslator.exe"

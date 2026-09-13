@@ -7,6 +7,7 @@ Creates a standalone Windows executable
 import os
 import sys
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from src.engine.ocr_models import OCR_MODEL_NAMES, REQUIRED_MODEL_FILES
 
 block_cipher = None
 
@@ -30,8 +31,26 @@ datas = [
     ('assets', 'assets'),
 ]
 
-# PaddleOCR downloads models to user cache at runtime - no need to bundle model data
-# But PaddleX needs its .version file
+# The release is self-contained: build.py stages the exact OCR models verified
+# by the application before PyInstaller runs. Fail the build instead of
+# publishing an installer whose first launch depends on a model download.
+for _model_name in OCR_MODEL_NAMES:
+    _model_dir = os.path.abspath(
+        os.path.join('build', 'ocr_models', _model_name)
+    )
+    _missing_model_files = [
+        _filename
+        for _filename in REQUIRED_MODEL_FILES
+        if not os.path.isfile(os.path.join(_model_dir, _filename))
+    ]
+    if _missing_model_files:
+        raise FileNotFoundError(
+            f"OCR model {_model_name} is incomplete in {_model_dir}: "
+            f"missing {', '.join(_missing_model_files)}"
+        )
+    datas.append((_model_dir, f'ocr_models/{_model_name}'))
+
+# PaddleX still needs its package data in addition to the bundled model files.
 # chromadb / sentence_transformers are optional (RAG falls back to keyword search)
 datas += collect_data_files('pypinyin')
 datas += collect_data_files('paddlex')

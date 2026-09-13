@@ -1,7 +1,9 @@
 import inspect
 import sys
+import tempfile
 import types
 import unittest
+from pathlib import Path
 from threading import Lock
 from unittest.mock import ANY, MagicMock, patch
 
@@ -109,6 +111,65 @@ class OCRLanguageParityTests(unittest.TestCase):
         ):
             self.assertIs(ocr.get_paddle_ocr("chi_sim"), shared_chinese_ocr)
             self.assertIs(ocr.get_paddle_ocr("chi_tra"), shared_chinese_ocr)
+
+    def test_frozen_ocr_uses_complete_models_from_the_application_bundle(self):
+        model_names = (
+            "PP-OCRv6_medium_det",
+            "PP-OCRv6_medium_rec",
+        )
+        required_files = (
+            "inference.yml",
+            "inference.json",
+            "inference.pdiparams",
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            bundle_root = Path(temp_dir)
+            for model_name in model_names:
+                model_dir = bundle_root / "ocr_models" / model_name
+                model_dir.mkdir(parents=True)
+                for filename in required_files:
+                    (model_dir / filename).write_text("fixture", encoding="utf-8")
+
+            fake_engine = MagicMock()
+            fake_paddle = types.SimpleNamespace(
+                device=types.SimpleNamespace(set_device=MagicMock())
+            )
+
+            with (
+                patch.object(ocr, "PADDLE_AVAILABLE", True),
+                patch.object(
+                    ocr,
+                    "PaddleOCR",
+                    return_value=fake_engine,
+                    create=True,
+                ) as paddle_ocr_class,
+                patch.dict(sys.modules, {"paddle": fake_paddle}),
+                patch.object(ocr._sys, "frozen", True, create=True),
+                patch.object(ocr._sys, "_MEIPASS", temp_dir, create=True),
+                patch.dict(ocr._global_paddle_ocr, {}, clear=True),
+                patch.dict(ocr._ocr_ready, {}, clear=True),
+                patch.dict(ocr._ocr_init_errors, {}, clear=True),
+            ):
+                ocr._init_paddle_ocr_sync("chi_sim")
+
+            options = paddle_ocr_class.call_args.kwargs
+            self.assertEqual(
+                options.get("text_detection_model_name"),
+                "PP-OCRv6_medium_det",
+            )
+            self.assertEqual(
+                options.get("text_detection_model_dir"),
+                str(bundle_root / "ocr_models" / "PP-OCRv6_medium_det"),
+            )
+            self.assertEqual(
+                options.get("text_recognition_model_name"),
+                "PP-OCRv6_medium_rec",
+            )
+            self.assertEqual(
+                options.get("text_recognition_model_dir"),
+                str(bundle_root / "ocr_models" / "PP-OCRv6_medium_rec"),
+            )
 
     def test_preloading_both_scripts_starts_only_one_ocr_initialization(self):
         fake_thread = MagicMock()

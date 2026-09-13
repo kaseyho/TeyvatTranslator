@@ -37,6 +37,7 @@ import numpy as np
 from PIL import ImageGrab, Image
 from .translator import Translator, get_translator
 from .language_config import get_paddle_lang, make_cache_key, normalize_for_lookup
+from .ocr_models import get_bundled_ocr_model_options
 from src.diagnostics import (
     get_capture_directory,
     get_log_file,
@@ -304,12 +305,23 @@ def _init_paddle_ocr_sync(source_lang: str = "chi_sim"):
         # PaddleOCR 3.x: Disable document preprocessing features for game dialogue
         # These features (orientation, unwarping, textline) add significant latency
         # but are unnecessary for horizontal game subtitles
-        ocr = PaddleOCR(
-            lang=paddle_lang,
-            use_doc_orientation_classify=False,  # Skip document orientation detection
-            use_doc_unwarping=False,             # Skip document dewarping
-            use_textline_orientation=False       # Skip textline orientation (conflicts with use_angle_cls)
-        )
+        ocr_options = {
+            "use_doc_orientation_classify": False,
+            "use_doc_unwarping": False,
+            "use_textline_orientation": False,
+        }
+        if getattr(_sys, "frozen", False):
+            ocr_options.update(get_bundled_ocr_model_options())
+            logger.info(
+                "Using OCR models bundled with the application: detection=%s "
+                "recognition=%s",
+                ocr_options["text_detection_model_dir"],
+                ocr_options["text_recognition_model_dir"],
+            )
+        else:
+            ocr_options["lang"] = paddle_lang
+
+        ocr = PaddleOCR(**ocr_options)
         
         # Warmup pass
         logger.info(f"Warming up OCR model '{paddle_lang}'...")

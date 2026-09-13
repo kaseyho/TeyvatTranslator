@@ -54,17 +54,27 @@ jobs:
       - name: Run real Simplified and Traditional OCR parity smoke
         env:
           TEYVAT_REAL_OCR_SMOKE: "1"
+          PADDLE_PDX_CACHE_HOME: ${{ runner.temp }}\teyvat-build-paddlex-cache
         run: python -m unittest tests.test_real_ocr_model_parity -v
 
       - name: Install Inno Setup
         run: choco install innosetup --no-progress --yes
 
       - name: Build installer
+        env:
+          PADDLE_PDX_CACHE_HOME: ${{ runner.temp }}\teyvat-build-paddlex-cache
         run: python build.py --clean --installer
 
       - name: Run frozen Windows OCR parity smoke
         shell: pwsh
         run: |
+          $cleanModelCache = Join-Path $env:RUNNER_TEMP "teyvat-frozen-empty-model-cache"
+          if (Test-Path $cleanModelCache) {
+            Remove-Item -Path $cleanModelCache -Recurse -Force
+          }
+          New-Item -ItemType Directory -Path $cleanModelCache | Out-Null
+          $env:PADDLE_PDX_CACHE_HOME = $cleanModelCache
+
           $process = Start-Process `
             -FilePath ".\dist\TeyvatTranslator\TeyvatTranslator.exe" `
             -ArgumentList "--ocr-smoke" `
@@ -96,6 +106,12 @@ jobs:
           }
           if (!(Select-String -Path $logPath -Pattern "OCR parity smoke passed" -Quiet)) {
             throw "Frozen OCR smoke exited successfully but did not log its success marker"
+          }
+          if (!(Select-String -Path $logPath -Pattern "Using OCR models bundled with the application" -Quiet)) {
+            throw "Frozen OCR smoke did not use the bundled model directories"
+          }
+          if (Test-Path (Join-Path $cleanModelCache "official_models")) {
+            throw "Frozen OCR smoke unexpectedly downloaded models into the empty cache"
           }
 
       - name: Upload frozen diagnostics on failure
